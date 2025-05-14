@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+sqlalchemy>=1.4
+psycopg2-binary
+pydantic 

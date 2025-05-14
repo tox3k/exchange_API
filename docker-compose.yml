@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: exchange
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: astra
+      POSTGRES_LOGGING_COLLECTOR: 'on'
+      POSTGRES_LOG_DIRECTORY: 'pg_log'
+      POSTGRES_LOG_FILENAME: 'postgresql.log'
+      POSTGRES_LOG_STATEMENT: 'all'
+      POSTGRES_LOG_MIN_MESSAGES: 'info'
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    command: >
+      postgres
+      -c logging_collector=on
+      -c log_directory=/var/lib/postgresql/data/pg_log
+      -c log_filename=postgresql.log
+      -c log_statement=all
+      -c log_min_messages=info
+volumes:
+  pgdata: 
