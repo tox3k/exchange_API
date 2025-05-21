@@ -314,3 +314,16 @@ def cancel_order(order_id: UUID, current_user=Depends(get_current_user), db: Ses
     o.status = OrderStatus.CANCELLED
     db.commit()
     return Ok()
+
+@app.delete("/api/v1/admin/instrument/{ticker}", response_model=Ok, tags=["admin"], summary="Delete Instrument", description="Удаление инструмента")
+def delete_instrument(ticker: str, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admin can delete instruments")
+    if ticker == RUB_TICKER:
+        raise HTTPException(status_code=400, detail="Cannot delete RUB instrument")
+    instr = db.query(Instrument).filter_by(ticker=ticker).first()
+    if not instr:
+        raise HTTPException(status_code=404, detail="Instrument not found")
+    db.delete(instr)
+    db.commit()
+    return Ok()
