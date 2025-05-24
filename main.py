@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 from uuid import uuid4, UUID
 from database import engine, Base, SessionLocal
 from models import Instrument, User as UserModel, UserRole, Balance, Order as OrderModel, Direction, OrderStatus, Transaction as TransactionModel
@@ -243,7 +244,7 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
                 OrderModel.status != OrderStatus.EXECUTED
             )
             if price:
-                q = q.filter(OrderModel.price <= price)
+                q = q.filter(or_(OrderModel.price <= price, OrderModel.price == None))
             q = q.order_by(OrderModel.price.asc(), OrderModel.timestamp.asc())
         else:
             # Для SELL ищем BUY с max ценой >= нашей
@@ -255,7 +256,7 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
 
             )
             if price:
-                q = q.filter(OrderModel.price >= price)
+                q = q.filter(or_(OrderModel.price >= price, OrderModel.price == None))
             q = q.order_by(OrderModel.price.desc(), OrderModel.timestamp.asc())
         matches = q.all()
         for match in matches:
