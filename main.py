@@ -400,5 +400,5 @@ def delete_instrument(ticker: str, current_user=Depends(get_current_user), db: S
     db.commit()
     return Ok()
 
-if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# if __name__ == '__main__':
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
