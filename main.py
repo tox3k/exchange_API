@@ -180,8 +180,8 @@ def delete_user(user_id: UUID, current_user=Depends(get_current_user), db: Sessi
 @app.get("/api/v1/public/orderbook/{ticker}", response_model=L2OrderBook, tags=["public"], summary="Get Orderbook", description="Текущие заявки")
 async def get_orderbook(ticker: str, limit: int = 10, db: Session = Depends(get_db)):
     # Показываем лучшие заявки (bid/ask) по цене
-    bids = db.query(OrderModel).filter_by(ticker=ticker, direction=Direction.BUY, status=OrderStatus.NEW).order_by(OrderModel.price.desc()).limit(limit).all()
-    asks = db.query(OrderModel).filter_by(ticker=ticker, direction=Direction.SELL, status=OrderStatus.NEW).order_by(OrderModel.price.asc()).limit(limit).all()
+    bids = db.query(OrderModel).filter(OrderModel.ticker == ticker, OrderModel.direction == Direction.BUY, or_(OrderModel.status == OrderStatus.NEW, OrderModel.status == OrderStatus.PARTIALLY_EXECUTED)).order_by(OrderModel.price.desc()).limit(limit).all()
+    asks = db.query(OrderModel).filter(OrderModel.ticker == ticker, OrderModel.direction == Direction.SELL, or_(OrderModel.status == OrderStatus.NEW, OrderModel.status == OrderStatus.PARTIALLY_EXECUTED)).order_by(OrderModel.price.asc()).limit(limit).all()
     bid_levels = [Level(price=o.price, qty=o.qty - o.filled) for o in bids if o.price is not None]
     ask_levels = [Level(price=o.price, qty=o.qty - o.filled) for o in asks if o.price is not None]
     return L2OrderBook(bid_levels=bid_levels, ask_levels=ask_levels)
