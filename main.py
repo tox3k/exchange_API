@@ -150,6 +150,18 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
     instr = db.query(Instrument).filter_by(ticker=ticker).first()
     if not instr:
         raise HTTPException(status_code=404, detail="Instrument not found")
+    # Проверка достаточности средств перед созданием ордера
+    if order_body.direction == Direction.BUY:
+        # Для покупки: достаточно RUB?
+        total_cost = (order_body.price if order_type == 'LIMIT' else 0) * order_body.qty
+        balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=RUB_TICKER).first()
+        if order_type == 'LIMIT' and (not balance or balance.amount < total_cost):
+            raise HTTPException(status_code=400, detail="Insufficient RUB balance for buy order")
+    else:
+        # Для продажи: достаточно актива?
+        asset_balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=ticker).first()
+        if not asset_balance or asset_balance.amount < order_body.qty:
+            raise HTTPException(status_code=400, detail="Insufficient asset balance for sell order")
     try:
         order = OrderModel(
             user_id=current_user.id,
