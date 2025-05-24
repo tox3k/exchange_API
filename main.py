@@ -184,8 +184,27 @@ async def get_orderbook(ticker: str, limit: int = 10, db: Session = Depends(get_
     # Показываем лучшие заявки (bid/ask) по цене
     bids = db.query(OrderModel).filter(OrderModel.ticker == ticker, OrderModel.direction == Direction.BUY, or_(OrderModel.status == OrderStatus.NEW, OrderModel.status == OrderStatus.PARTIALLY_EXECUTED)).order_by(OrderModel.price.desc()).limit(limit).all()
     asks = db.query(OrderModel).filter(OrderModel.ticker == ticker, OrderModel.direction == Direction.SELL, or_(OrderModel.status == OrderStatus.NEW, OrderModel.status == OrderStatus.PARTIALLY_EXECUTED)).order_by(OrderModel.price.asc()).limit(limit).all()
-    bid_levels = [Level(price=o.price, qty=o.qty - o.filled) for o in bids if o.price is not None]
-    ask_levels = [Level(price=o.price, qty=o.qty - o.filled) for o in asks if o.price is not None]
+    
+    bid_prices = {}
+    good_bids = []
+    for bid in bids:
+        if bid.price != None:
+            if bid.price not in bid_prices:
+                bid_prices[bid.price] = 0
+            good_bids.append(bid)
+            bid_prices[bid.price] += bid.qty - bid.filled
+            
+    ask_prices = {}
+    good_asks = []
+    for ask in asks:
+        if ask.price != None:
+            if ask.price not in ask_prices:
+                ask_prices[ask.price] = 0
+                good_asks.append(ask)
+            
+            ask_prices[ask.price] += ask.qty - ask.filled
+    bid_levels = [Level(price=o.price, qty=bid_prices[o.price]) for o in good_bids if o.price is not None]
+    ask_levels = [Level(price=o.price, qty=ask_prices[o.price]) for o in good_asks if o.price is not None]
     return L2OrderBook(bid_levels=bid_levels, ask_levels=ask_levels)
 
 @app.get("/api/v1/public/transactions/{ticker}", response_model=list[TransactionSchema], tags=["public"], summary="Get Transaction History", description="История сделок")
