@@ -30,8 +30,8 @@ class User(BaseModel):
         from_attributes = True
 
 class Instrument(BaseModel):
-    name: str = Field(..., min_length=2)
-    ticker: str
+    name: str
+    ticker: str = Field(..., pattern=r"^[A-Z]{2,10}$")
 
     class Config:
         from_attributes = True
