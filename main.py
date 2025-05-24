@@ -191,7 +191,7 @@ async def get_orderbook(ticker: str, limit: int = 10, db: Session = Depends(get_
         if bid.price != None:
             if bid.price not in bid_prices:
                 bid_prices[bid.price] = 0
-            good_bids.append(bid)
+                good_bids.append(bid)
             bid_prices[bid.price] += bid.qty - bid.filled
             
     ask_prices = {}
