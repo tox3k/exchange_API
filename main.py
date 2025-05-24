@@ -57,10 +57,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             resp_text = resp_body.decode("utf-8")
         except Exception:
             resp_text = str(resp_body)
-        if len(resp_text) > 1000:
-            resp_text = resp_text[:1000] + "..."
-        log_msg += f" | status={status_code} | response={resp_text}"
-        logger.info(log_msg)
+        
         return response
 
 @asynccontextmanager
@@ -219,126 +216,126 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
         asset_balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=ticker).first()
         if not asset_balance or asset_balance.amount < order_body.qty:
             raise HTTPException(status_code=400, detail="Insufficient asset balance for sell order")
-    try:
-        order = OrderModel(
-            user_id=current_user.id,
-            type=order_type,
-            direction=order_body.direction,
-            ticker=ticker,
-            qty=order_body.qty,
-            price=getattr(order_body, 'price', None)
+    
+    order = OrderModel(
+        user_id=current_user.id,
+        type=order_type,
+        direction=order_body.direction,
+        ticker=ticker,
+        qty=order_body.qty,
+        price=getattr(order_body, 'price', None)
+    )
+    db.add(order)
+    db.flush()
+    # --- Matching engine ---
+    to_fill = order.qty
+    price = order.price if order_type == 'LIMIT' else None
+    direction = order.direction
+    # BUY: ищем SELL, SELL: ищем BUY
+    if direction == Direction.BUY:
+        # Для BUY ищем SELL с min ценой <= нашей
+        q = db.query(OrderModel).filter(
+            OrderModel.ticker == ticker,
+            OrderModel.direction == Direction.SELL,
+            OrderModel.status != OrderStatus.CANCELLED,
+            OrderModel.status != OrderStatus.EXECUTED
         )
-        db.add(order)
-        db.flush()
-        # --- Matching engine ---
-        to_fill = order.qty
-        price = order.price if order_type == 'LIMIT' else None
-        direction = order.direction
-        # BUY: ищем SELL, SELL: ищем BUY
-        if direction == Direction.BUY:
-            # Для BUY ищем SELL с min ценой <= нашей
-            q = db.query(OrderModel).filter(
-                OrderModel.ticker == ticker,
-                OrderModel.direction == Direction.SELL,
-                OrderModel.status != OrderStatus.CANCELLED,
-                OrderModel.status != OrderStatus.EXECUTED
-            )
-            if price:
-                q = q.filter(or_(OrderModel.price <= price, OrderModel.price == None))
-            q = q.order_by(OrderModel.price.asc(), OrderModel.timestamp.asc())
-        else:
-            # Для SELL ищем BUY с max ценой >= нашей
-            q = db.query(OrderModel).filter(
-                OrderModel.ticker == ticker,
-                OrderModel.direction == Direction.BUY,
-                OrderModel.status != OrderStatus.CANCELLED,
-                OrderModel.status != OrderStatus.EXECUTED
+        if price:
+            q = q.filter(OrderModel.price <= price)
+        q = q.order_by(OrderModel.price.asc(), OrderModel.timestamp.asc())
+    else:
+        # Для SELL ищем BUY с max ценой >= нашей
+        q = db.query(OrderModel).filter(
+            OrderModel.ticker == ticker,
+            OrderModel.direction == Direction.BUY,
+            OrderModel.status != OrderStatus.CANCELLED,
+            OrderModel.status != OrderStatus.EXECUTED
 
-            )
-            if price:
-                q = q.filter(or_(OrderModel.price >= price, OrderModel.price == None))
-            q = q.order_by(OrderModel.price.desc(), OrderModel.timestamp.asc())
-        matches = q.all()
-        for match in matches:
-            if to_fill == 0:
-                break
-            match_available = match.qty - match.filled
-            fill_qty = min(to_fill, match_available)
-            # Цена сделки
-            deal_price = match.price if match.price is not None else order.price
-            # Обновляем балансы
-            if direction == Direction.BUY:
-                # Покупатель current_user, продавец match.user_id
-                # Списать deal_price*fill_qty у buyer (RUB), зачислить ticker
-                # Списать ticker у seller, зачислить RUB
-                buyer_balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=RUB_TICKER).first()
-                if not buyer_balance or buyer_balance.amount < deal_price * fill_qty:
-                    break  # Недостаточно средств
-                seller_balance = db.query(Balance).filter_by(user_id=match.user_id, ticker=ticker).first()
-                if not seller_balance or seller_balance.amount < fill_qty:
-                    continue  # У продавца нет актива
-                # Списать RUB у buyer
-                buyer_balance.amount -= deal_price * fill_qty
-                # Зачислить актив buyer
-                user_asset = db.query(Balance).filter_by(user_id=current_user.id, ticker=ticker).first()
-                if not user_asset:
-                    user_asset = Balance(user_id=current_user.id, ticker=ticker, amount=0)
-                    db.add(user_asset)
-                user_asset.amount += fill_qty
-                # Списать актив у seller
-                seller_balance.amount -= fill_qty
-                # Зачислить RUB seller
-                seller_rub = db.query(Balance).filter_by(user_id=match.user_id, ticker=RUB_TICKER).first()
-                if not seller_rub:
-                    seller_rub = Balance(user_id=match.user_id, ticker=RUB_TICKER, amount=0)
-                    db.add(seller_rub)
-                seller_rub.amount += deal_price * fill_qty
-            else:
-                # SELL: продавец current_user, покупатель match.user_id
-                # Списать актив у seller, зачислить RUB
-                # Списать RUB у buyer, зачислить актив
-                seller_balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=ticker).first()
-                if not seller_balance or seller_balance.amount < fill_qty:
-                    break  # Недостаточно актива
-                buyer_balance = db.query(Balance).filter_by(user_id=match.user_id, ticker=RUB_TICKER).first()
-                if not buyer_balance or buyer_balance.amount < deal_price * fill_qty:
-                    continue  # У покупателя нет RUB
-                # Списать актив у seller
-                seller_balance.amount -= fill_qty
-                # Зачислить RUB seller
-                seller_rub = db.query(Balance).filter_by(user_id=current_user.id, ticker=RUB_TICKER).first()
-                if not seller_rub:
-                    seller_rub = Balance(user_id=current_user.id, ticker=RUB_TICKER, amount=0)
-                    db.add(seller_rub)
-                seller_rub.amount += deal_price * fill_qty
-                # Списать RUB у buyer
-                buyer_balance.amount -= deal_price * fill_qty
-                # Зачислить актив buyer
-                buyer_asset = db.query(Balance).filter_by(user_id=match.user_id, ticker=ticker).first()
-                if not buyer_asset:
-                    buyer_asset = Balance(user_id=match.user_id, ticker=ticker, amount=0)
-                    db.add(buyer_asset)
-                buyer_asset.amount += fill_qty
-            # Обновляем ордера
-            match.filled += fill_qty
-            if match.filled == match.qty:
-                match.status = OrderStatus.EXECUTED
-            else:
-                match.status = OrderStatus.PARTIALLY_EXECUTED
-            order.filled += fill_qty
-            if order.filled == order.qty:
-                order.status = OrderStatus.EXECUTED
-            else:
-                order.status = OrderStatus.PARTIALLY_EXECUTED
-            # Запись о сделке
-            db.add(TransactionModel(ticker=ticker, amount=fill_qty, price=deal_price))
-            to_fill -= fill_qty
-        db.commit()
-        db.refresh(order)
-        order_id = order.id
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Order creation failed: {str(e)}")
+        )
+        if price:
+            q = q.filter(OrderModel.price >= price)
+        q = q.order_by(OrderModel.price.desc(), OrderModel.timestamp.asc())
+    matches = q.all()
+    for match in matches:
+        if to_fill == 0:
+            break
+        match_available = match.qty - match.filled
+        fill_qty = min(to_fill, match_available)
+        # Цена сделки
+        deal_price = match.price if match.price is not None else order.price
+        # Обновляем балансы
+        if direction == Direction.BUY:
+            # Покупатель current_user, продавец match.user_id
+            # Списать deal_price*fill_qty у buyer (RUB), зачислить ticker
+            # Списать ticker у seller, зачислить RUB
+            buyer_balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=RUB_TICKER).first()
+            if not buyer_balance or buyer_balance.amount < deal_price * fill_qty:
+                break  # Недостаточно средств
+            seller_balance = db.query(Balance).filter_by(user_id=match.user_id, ticker=ticker).first()
+            if not seller_balance or seller_balance.amount < fill_qty:
+                continue  # У продавца нет актива
+            # Списать RUB у buyer
+            buyer_balance.amount -= deal_price * fill_qty
+            # Зачислить актив buyer
+            user_asset = db.query(Balance).filter_by(user_id=current_user.id, ticker=ticker).first()
+            if not user_asset:
+                user_asset = Balance(user_id=current_user.id, ticker=ticker, amount=0)
+                db.add(user_asset)
+            user_asset.amount += fill_qty
+            # Списать актив у seller
+            seller_balance.amount -= fill_qty
+            # Зачислить RUB seller
+            seller_rub = db.query(Balance).filter_by(user_id=match.user_id, ticker=RUB_TICKER).first()
+            if not seller_rub:
+                seller_rub = Balance(user_id=match.user_id, ticker=RUB_TICKER, amount=0)
+                db.add(seller_rub)
+            seller_rub.amount += deal_price * fill_qty
+        else:
+            # SELL: продавец current_user, покупатель match.user_id
+            # Списать актив у seller, зачислить RUB
+            # Списать RUB у buyer, зачислить актив
+            seller_balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=ticker).first()
+            if not seller_balance or seller_balance.amount < fill_qty:
+                break  # Недостаточно актива
+            buyer_balance = db.query(Balance).filter_by(user_id=match.user_id, ticker=RUB_TICKER).first()
+            if not buyer_balance or buyer_balance.amount < deal_price * fill_qty:
+                continue  # У покупателя нет RUB
+            # Списать актив у seller
+            seller_balance.amount -= fill_qty
+            # Зачислить RUB seller
+            seller_rub = db.query(Balance).filter_by(user_id=current_user.id, ticker=RUB_TICKER).first()
+            if not seller_rub:
+                seller_rub = Balance(user_id=current_user.id, ticker=RUB_TICKER, amount=0)
+                db.add(seller_rub)
+            seller_rub.amount += deal_price * fill_qty
+            # Списать RUB у buyer
+            buyer_balance.amount -= deal_price * fill_qty
+            # Зачислить актив buyer
+            buyer_asset = db.query(Balance).filter_by(user_id=match.user_id, ticker=ticker).first()
+            if not buyer_asset:
+                buyer_asset = Balance(user_id=match.user_id, ticker=ticker, amount=0)
+                db.add(buyer_asset)
+            buyer_asset.amount += fill_qty
+        # Обновляем ордера
+        match.filled += fill_qty
+        if match.filled == match.qty:
+            match.status = OrderStatus.EXECUTED
+        else:
+            match.status = OrderStatus.PARTIALLY_EXECUTED
+        order.filled += fill_qty
+        if order.filled == order.qty:
+            order.status = OrderStatus.EXECUTED
+        else:
+            order.status = OrderStatus.PARTIALLY_EXECUTED
+        # Запись о сделке
+        db.add(TransactionModel(ticker=ticker, amount=fill_qty, price=deal_price))
+        to_fill -= fill_qty
+    if to_fill != 0 and order_type == 'MARKET':
+        db.delete(order)
+        raise HTTPException(status_code=400, detail="Can't execute immediately")
+    db.commit()
+    db.refresh(order)
+    order_id = order.id
     return CreateOrderResponse(order_id=order_id)
 
 @app.get("/api/v1/order", response_model=List[Union[LimitOrder, MarketOrder]], tags=["order"], summary="List Orders")
