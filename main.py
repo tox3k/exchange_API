@@ -19,13 +19,15 @@ import uvicorn
 logger = logging.getLogger("api_logger")
 logger.setLevel(logging.INFO)
 file_handler = logging.FileHandler("api_requests.log")
-file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+time_format = '%H:%M:%S'
+file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt=time_format))
 logger.addHandler(file_handler)
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
         method = request.method
         url = str(request.url)
+        headers = request.headers.get('authorization')
         params = dict(request.query_params)
         body = None
         if method in ("POST", "PUT", "PATCH"):
@@ -39,7 +41,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                     pass
             except Exception:
                 body = None
-        log_msg = f"{method} {url} | params={params}"
+        log_msg = f"{method} {'/api' + url.split('/api')[1]} | api_key={headers} | params={params}"
         if body:
             log_msg += f" | body={body}"
         logger.info(log_msg)
