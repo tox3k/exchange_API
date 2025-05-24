@@ -65,4 +65,5 @@ class Transaction(Base):
     ticker = Column(String(10), ForeignKey("instruments.ticker"), nullable=False)
     amount = Column(Integer, nullable=False)
     price = Column(Integer, nullable=False)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now()) 
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    instrument = relationship("Instrument")
