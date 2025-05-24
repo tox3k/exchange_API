@@ -8,6 +8,56 @@ from schemas import NewUser, User as UserSchema, Instrument as InstrumentSchema,
 from deps import get_db, get_current_user
 from contextlib import asynccontextmanager
 from typing import List, Union
+import logging
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+import json
+
+# Настройка логгера
+logger = logging.getLogger("api_logger")
+logger.setLevel(logging.INFO)
+file_handler = logging.FileHandler("api_requests.log")
+file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+logger.addHandler(file_handler)
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        method = request.method
+        url = str(request.url)
+        params = dict(request.query_params)
+        body = None
+        if method in ("POST", "PUT", "PATCH"):
+            try:
+                body_bytes = await request.body()
+                body = body_bytes.decode("utf-8")
+                # Попробуем распарсить как JSON для красоты
+                try:
+                    body = json.dumps(json.loads(body), ensure_ascii=False)
+                except Exception:
+                    pass
+            except Exception:
+                body = None
+        log_msg = f"{method} {url} | params={params}"
+        if body:
+            log_msg += f" | body={body}"
+        logger.info(log_msg)
+        response = await call_next(request)
+        # Логируем статус-код и тело ответа (до 1000 символов)
+        status_code = response.status_code
+        resp_body = b""
+        async for chunk in response.body_iterator:
+            resp_body += chunk
+        # Восстанавливаем итератор для корректного ответа клиенту
+        response.body_iterator = iter([resp_body])
+        try:
+            resp_text = resp_body.decode("utf-8")
+        except Exception:
+            resp_text = str(resp_body)
+        if len(resp_text) > 1000:
+            resp_text = resp_text[:1000] + "..."
+        log_msg += f" | status={status_code} | response={resp_text}"
+        logger.info(log_msg)
+        return response
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +87,8 @@ app = FastAPI(title="Toy exchange", version="0.1.0", lifespan=lifespan)
 
 RUB_TICKER = "RUB"
 RUB_NAME = "Российский рубль"
+
+app.add_middleware(LoggingMiddleware)
 
 @app.get("/")
 def root():
