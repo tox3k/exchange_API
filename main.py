@@ -41,7 +41,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                     pass
             except Exception:
                 body = None
-        log_msg = f"{method} {'/api' + url.split('/api')[1]} | api_key={headers} | params={params}"
+        log_msg = f"{method} {('/api' + url.split('/api')[1]) if '/api' in url else url} | api_key={headers} | params={params}"
         if body:
             log_msg += f" | body={body}"
         logger.info(log_msg)
