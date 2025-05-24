@@ -30,7 +30,7 @@ class User(BaseModel):
         from_attributes = True
 
 class Instrument(BaseModel):
-    name: str
+    name: str = Field(..., min_length=2)
     ticker: str
 
     class Config:
