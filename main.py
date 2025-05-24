@@ -47,8 +47,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         resp_body = b""
         async for chunk in response.body_iterator:
             resp_body += chunk
-        # Восстанавливаем итератор для корректного ответа клиенту
-        response.body_iterator = iter([resp_body])
+        # Восстанавливаем асинхронный итератор для корректного ответа клиенту
+        async def new_body_iterator():
+            yield resp_body
+        response.body_iterator = new_body_iterator()
         try:
             resp_text = resp_body.decode("utf-8")
         except Exception:
