@@ -34,6 +34,7 @@ class Instrument(Base):
     name = Column(String, nullable=False)
     orders = relationship("Order", back_populates="instrument", cascade="all, delete")
     transactions = relationship("Transaction", back_populates="instrument", cascade="all, delete")
+    balances = relationship("Balance", back_populates="instrument", cascade="all, delete")
 
 class Balance(Base):
     __tablename__ = "balances"
