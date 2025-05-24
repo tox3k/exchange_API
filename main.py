@@ -119,11 +119,7 @@ def delete_user(user_id: UUID, current_user=Depends(get_current_user), db: Sessi
     user = db.query(UserModel).filter_by(id=user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    # Удаляем связанные балансы
-    db.query(Balance).filter_by(user_id=user_id).delete()
-    # Удаляем связанные ордера
-    db.query(OrderModel).filter_by(user_id=user_id).delete()
-    # (опционально) можно добавить удаление других связанных сущностей
+    
     db.delete(user)
     db.commit()
     return user
