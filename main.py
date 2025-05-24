@@ -12,6 +12,7 @@ import logging
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 import json
+import uvicorn
 
 # Настройка логгера
 logger = logging.getLogger("api_logger")
@@ -238,7 +239,8 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
             q = db.query(OrderModel).filter(
                 OrderModel.ticker == ticker,
                 OrderModel.direction == Direction.SELL,
-                OrderModel.status == OrderStatus.NEW
+                OrderModel.status != OrderStatus.CANCELLED,
+                OrderModel.status != OrderStatus.EXECUTED
             )
             if price:
                 q = q.filter(OrderModel.price <= price)
@@ -248,7 +250,9 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
             q = db.query(OrderModel).filter(
                 OrderModel.ticker == ticker,
                 OrderModel.direction == Direction.BUY,
-                OrderModel.status == OrderStatus.NEW
+                OrderModel.status != OrderStatus.CANCELLED,
+                OrderModel.status != OrderStatus.EXECUTED
+
             )
             if price:
                 q = q.filter(OrderModel.price >= price)
@@ -395,3 +399,6 @@ def delete_instrument(ticker: str, current_user=Depends(get_current_user), db: S
     db.delete(instr)
     db.commit()
     return Ok()
+
+if __name__ == '__main__':
+    uvicorn.run(app, host="0.0.0.0", port=8000)
