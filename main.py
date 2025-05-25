@@ -141,6 +141,8 @@ async def deposit(body: BodyDeposit, current_user=Depends(get_current_user), db:
     instr = db.query(Instrument).filter_by(ticker=body.ticker).first()
     if not instr:
         raise HTTPException(status_code=404, detail="Instrument not found")
+    if body.amount < 0:
+        raise HTTPException(status_code=400, detail="Can't deposit negative amount.")
     balance = db.query(Balance).filter_by(user_id=body.user_id, ticker=body.ticker).first()
     if not balance:
         balance = Balance(user_id=body.user_id, ticker=body.ticker, amount=body.amount)
@@ -302,6 +304,7 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
             if not user_asset:
                 user_asset = Balance(user_id=current_user.id, ticker=ticker, amount=0)
                 db.add(user_asset)
+                db.commit()
             user_asset.amount += fill_qty
             # Списать актив у seller
             seller_balance.amount -= fill_qty
@@ -310,6 +313,7 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
             if not seller_rub:
                 seller_rub = Balance(user_id=match.user_id, ticker=RUB_TICKER, amount=0)
                 db.add(seller_rub)
+                db.commit()
             seller_rub.amount += deal_price * fill_qty
         else:
             # SELL: продавец current_user, покупатель match.user_id
@@ -328,6 +332,7 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
             if not seller_rub:
                 seller_rub = Balance(user_id=current_user.id, ticker=RUB_TICKER, amount=0)
                 db.add(seller_rub)
+                db.commit()
             seller_rub.amount += deal_price * fill_qty
             # Списать RUB у buyer
             buyer_balance.amount -= deal_price * fill_qty
@@ -336,6 +341,7 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
             if not buyer_asset:
                 buyer_asset = Balance(user_id=match.user_id, ticker=ticker, amount=0)
                 db.add(buyer_asset)
+                db.commit()
             buyer_asset.amount += fill_qty
         # Обновляем ордера
         match.filled += fill_qty
