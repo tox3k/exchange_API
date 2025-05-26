@@ -14,8 +14,8 @@ services:
       POSTGRES_LOG_MIN_MESSAGES: 'info'
     ports:
       - "5432:5432"
-    # volumes:
-    #   - pgdata:/var/lib/postgresql/data
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     command: >
       postgres
       -c logging_collector=on
@@ -23,5 +23,17 @@ services:
       -c log_filename=postgresql.log
       -c log_statement=all
       -c log_min_messages=info
-# volumes:
-#   pgdata: 
+  
+  app:
+    build: .
+    environment:
+      POSTGRES_DB: exchange
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: astra
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    links:
+      - db:database
+    ports: "8888:8888"
+volumes:
+  pgdata: 

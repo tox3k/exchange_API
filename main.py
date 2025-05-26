@@ -75,7 +75,7 @@ async def lifespan(app: FastAPI):
         # ADMIN user
         admin = db.query(UserModel).filter_by(name="admin").first()
         if not admin:
-            api_key = f"key-{uuid4()}"
+            api_key = "key-fb5efdda-f0cf-41cd-ad1f-6452847e1eef"
             admin = UserModel(name="admin", api_key=api_key, role=UserRole.ADMIN)
             db.add(admin)
             db.commit()
