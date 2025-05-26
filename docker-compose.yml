@@ -26,6 +26,10 @@ services:
   
   app:
     build: .
+    depends_on:
+      db:
+        condition: service_started
+        restart: true
     environment:
       POSTGRES_DB: exchange
       POSTGRES_USER: user
@@ -34,6 +38,7 @@ services:
       POSTGRES_PORT: 5432
     links:
       - db:database
-    ports: "8888:8888"
+    ports: 
+      - "8888:8888"
 volumes:
   pgdata: 
