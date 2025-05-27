@@ -14,7 +14,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 import json
 import uvicorn
-import requests
 
 # Настройка логгера
 logger = logging.getLogger("api_logger")
