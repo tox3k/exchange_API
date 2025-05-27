@@ -30,6 +30,8 @@ services:
       db:
         condition: service_started
         restart: true
+    volumes:
+      - /var/www/exchange_API/api_requests.log:/server/api_requests.log
     environment:
       POSTGRES_DB: exchange
       POSTGRES_USER: user
