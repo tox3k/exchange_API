@@ -226,7 +226,6 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
         order_type = 'MARKET'
         order_body = MarketOrderBody(**body)
         orderbook = await get_orderbook(order_body.ticker, db=db)
-        print(orderbook)
         # Проверка наличия существующих ордеров для немедленного исполнения рыночных
         if order_body.direction == 'SELL':
             total_bids = 0
@@ -250,7 +249,15 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
         # Для покупки: достаточно RUB?
         total_cost = (order_body.price if order_type == 'LIMIT' else 0) * order_body.qty
         balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=RUB_TICKER).first()
-        if order_type == 'LIMIT' and (not balance or balance.amount < total_cost):
+        if order_type == 'MARKET':
+            all_orders = await get_orderbook(order_body.ticker, db=db)
+
+            for order_item in all_orders.ask_levels:
+                total_cost += (order_item.price * order_item.qty) if order_body.qty > order_item.qty else (order_item.price * order_body.qty)
+                if total_cost > balance.amount:
+                    raise HTTPException(status_code=400, detail="Insufficient RUB balance for buy order")
+
+        elif order_type == 'LIMIT' and (not balance or balance.amount < total_cost):
             raise HTTPException(status_code=400, detail="Insufficient RUB balance for buy order")
     else:
         # Для продажи: достаточно актива?
