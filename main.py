@@ -29,6 +29,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         method = request.method
         url = str(request.url)
         api_key = request.headers.get('authorization')
+        if api_key != None:
+            api_key = api_key.split(' ')[1]
         params = dict(request.query_params)
         body = None
         if method in ("POST", "PUT", "PATCH"):
