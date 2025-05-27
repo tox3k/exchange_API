@@ -12,6 +12,7 @@ services:
       POSTGRES_LOG_FILENAME: 'postgresql.log'
       POSTGRES_LOG_STATEMENT: 'all'
       POSTGRES_LOG_MIN_MESSAGES: 'info'
+      TZ: 'Asia/Yekaterinburg'
     ports:
       - "5432:5432"
     volumes:
@@ -38,6 +39,7 @@ services:
       POSTGRES_PASSWORD: astra
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      TZ: 'Asia/Yekaterinburg'
     links:
       - db:database
     ports: 
