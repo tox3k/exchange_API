@@ -28,7 +28,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
         method = request.method
         url = str(request.url)
-        headers = request.headers.get('authorization')
+        api_key = request.headers.get('authorization')
         params = dict(request.query_params)
         body = None
         if method in ("POST", "PUT", "PATCH"):
@@ -42,7 +42,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                     pass
             except Exception:
                 body = None
-        log_msg = f"{method} {('/api' + url.split('/api')[1]) if '/api' in url else url} | api_key={headers} | params={params}"
+        log_msg = f"{method} {('/api' + url.split('/api')[1]) if '/api' in url else url} | api_key={api_key} | params={params}"
         if body:
             log_msg += f" | body={body}"
         logger.info(log_msg)
