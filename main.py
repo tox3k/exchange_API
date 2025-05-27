@@ -226,18 +226,19 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
         order_type = 'MARKET'
         order_body = MarketOrderBody(**body)
         orderbook = await get_orderbook(order_body.ticker, db=db)
+        print(orderbook)
         # Проверка наличия существующих ордеров для немедленного исполнения рыночных
         if order_body.direction == 'SELL':
-            total_asks = 0
-            for order_item in orderbook.ask_levels:
-                total_asks += order_item.qty
-            if total_asks < order_body.qty:
-                raise HTTPException(status_code=400, detail=f'Can\'t execute order, not enough BUY-orders on exchange.')
-        else:
             total_bids = 0
             for order_item in orderbook.bid_levels:
                 total_bids += order_item.qty
             if total_bids < order_body.qty:
+                raise HTTPException(status_code=400, detail=f'Can\'t execute order, not enough BUY-orders on exchange.')
+        else:
+            total_asks = 0
+            for order_item in orderbook.ask_levels:
+                total_asks += order_item.qty
+            if total_asks < order_body.qty:
                 raise HTTPException(status_code=400, detail=f'Can\'t execute order, not enough SELL-orders on exchange.')
             
     ticker = order_body.ticker or RUB_TICKER
