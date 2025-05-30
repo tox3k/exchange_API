@@ -249,6 +249,10 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
         # Для покупки: достаточно RUB?
         total_cost = (order_body.price if order_type == 'LIMIT' else 0) * order_body.qty
         balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=RUB_TICKER).first()
+        on_exchange_buy_orders = db.query(OrderModel).filter_by(user_id=current_user.id, type="LIMIT", direction=Direction.BUY, status=OrderStatus.NEW).all()
+        on_exchange_buy_sum = 0
+        for order_item in on_exchange_buy_orders:
+            on_exchange_buy_sum += order_item.price * order_item.qty
         if order_type == 'MARKET':
             all_orders = await get_orderbook(order_body.ticker, db=db)
 
@@ -257,12 +261,16 @@ async def create_order(request: Request, current_user=Depends(get_current_user),
                 if total_cost > balance.amount:
                     raise HTTPException(status_code=400, detail="Insufficient RUB balance for buy order")
 
-        elif order_type == 'LIMIT' and (not balance or balance.amount < total_cost):
+        elif order_type == 'LIMIT' and (not balance or balance.amount - on_exchange_buy_sum < total_cost):
             raise HTTPException(status_code=400, detail="Insufficient RUB balance for buy order")
     else:
         # Для продажи: достаточно актива?
         asset_balance = db.query(Balance).filter_by(user_id=current_user.id, ticker=ticker).first()
-        if not asset_balance or asset_balance.amount < order_body.qty:
+        on_exchange_sell_orders = db.query(OrderModel).filter_by(user_id=current_user.id, ticker=ticker, direction=Direction.SELL, status=OrderStatus.NEW).all()
+        on_exchange_sell_sum = 0
+        for order_item in on_exchange_sell_orders:
+            on_exchange_sell_sum += order_item.qty
+        if not asset_balance or asset_balance.amount - on_exchange_sell_sum < order_body.qty:
             raise HTTPException(status_code=400, detail="Insufficient asset balance for sell order")
     
     order = OrderModel(
